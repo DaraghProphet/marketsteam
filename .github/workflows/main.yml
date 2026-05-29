@@ -1,0 +1,45 @@
+name: Sync #market-updates → Confluence
+
+on:
+  schedule:
+    # Runs every hour at :05 past the hour (UTC)
+    - cron: "5 * * * *"
+  workflow_dispatch:
+    # Allows manual trigger from GitHub Actions UI
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to commit last_processed_ts.txt back
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run sync script
+        env:
+          SLACK_BOT_TOKEN:      ${{ secrets.SLACK_BOT_TOKEN }}
+          ANTHROPIC_API_KEY:    ${{ secrets.ANTHROPIC_API_KEY }}
+          CONFLUENCE_EMAIL:     ${{ secrets.CONFLUENCE_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+        run: python sync_market_updates.py
+
+      - name: Commit updated state file
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add last_processed_ts.txt
+          # Only commit if there's actually a change
+          git diff --cached --quiet || git commit -m "chore: advance market-updates sync state [skip ci]"
+          git push
